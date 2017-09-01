@@ -37,14 +37,14 @@
             this.light = light;
             // ---- create points ----
             for (let p of struct.points) {
-              this.points.push(new Robot.Point(size * p.x + x, size * p.y + y, p.f));
+              const pp = new Robot.Point(size * p.x + x, size * p.y + y, p.f)
+              this.points.push(pp);
             }
             // ---- create links ----
             for (let link of struct.links) {
               const p0 = this.points[link.p0];
               const p1 = this.points[link.p1];
               const dx = p0.x - p1.x;
-              console.log( "dx=" + dx )
               const dy = p0.y - p1.y;
               this.links.push(
                 new Robot.Link(
@@ -62,27 +62,6 @@
           }
           update() {
             if (++this.frame % 20 === 0) this.dir = -this.dir;
-            if (
-              dancerDrag &&
-              this === dancerDrag &&
-              this.size < 16 &&
-              this.frame > 600
-            ) {
-              dancerDrag = null;
-              dancers.push(
-                new Robot(
-                  this.color,
-                  this.light * 1.25,
-                  this.size * 2,
-                  pointer.x,
-                  pointer.y - 100 * this.size * 2,
-                  struct
-                )
-              );
-              dancers.sort(function(d0, d1) {
-                return d0.size - d1.size;
-              });
-            }
             // ---- update links ----
             for (let link of this.links) {
               const p0 = link.p0;
@@ -105,25 +84,21 @@
             }
             // ---- update points ----
             for (let point of this.points) {
-              // ---- dragging ----
-              if (this === dancerDrag && point === pointDrag) {
-                point.x += (pointer.x - point.x) * 0.1;
-                point.y += (pointer.y - point.y) * 0.1;
-              }
               // ---- dance ----
-              if (this !== dancerDrag) {
-                point.fn && point.fn(16 * Math.sqrt(this.size), this.dir);
+              /*
+              if (point.fn) {
+                point.fn(16 * Math.sqrt(this.size), this.dir);
               }
+              */
               // ---- verlet integration ----
-              point.vx = point.x - point.px;
-              point.vy = point.y - point.py;
+              point.vx = (point.x - point.px) * 0.995;
+              point.vy = (point.y - point.py) * 0.995;
               point.px = point.x;
               point.py = point.y;
-              point.vx *= 0.995;
-              point.vy *= 0.995;
               point.x += point.vx;
               point.y += point.vy + 0.01;
             }
+            /*
             // ---- ground ----
             for (let link of this.links) {
               const p1 = link.p1;
@@ -138,6 +113,7 @@
             const delta = (this.x - this.points[0].x) * 0.0002;
             this.points[9].x += delta;
             this.points[10].x += delta;
+            */
           }
           draw() {
             for (let link of this.links) {
@@ -206,7 +182,6 @@
             this.p0 = p0;
             this.p1 = p1;
             this.distance = dist;
-            console.log( "distance=" + dist)
             this.size = size;
             this.light = light || 1.0;
             this.force = force || 0.5;
@@ -302,7 +277,7 @@
           ctx.fillRect(0, 0, canvas.width, canvas.height * 0.15);
           ctx.fillRect(0, canvas.height * 0.85, canvas.width, canvas.height * 0.15);
           for (let dancer of dancers) {
-//            dancer.update();
+            dancer.update();
             dancer.draw();
           }
         };

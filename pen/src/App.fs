@@ -6,16 +6,6 @@ open Fable.Import
 open Fable.Import.Browser
 open Fable.Import.JS
 
-type Point = {
-    x:float
-    y:float
-    w:float
-    px:float
-    py:float
-    vx:float
-    vy:float
-}
-
 
 let canvas = Browser.document.getElementsByTagName_canvas().[0]
 
@@ -26,10 +16,22 @@ let onResize _ =
 Browser.window.addEventListener_resize( unbox onResize, false)
 let ctx = canvas.getContext_2d()
 onResize()
+let ground = if canvas.height > 500. then 0.85 else 1.0
+
+
+type Point = {
+    x:float
+    y:float
+    w:float
+    px:float
+    py:float
+    vx:float
+    vy:float
+}
 
 type StructPoint = {
   p:Point
-  f: (StructPoint -> float -> float -> StructPoint) option
+  f: (Point -> float -> float -> Point) option
 }
 
 type Link = {
@@ -103,17 +105,17 @@ module Robot =
           { empty
             with
               p={ empty.p with x=0.; y=4. }
-              f=Some (fun sp s d -> { sp with p = { sp.p with y = sp.p.y - 0.01 * s }})
+              f=Some (fun p s d -> { p with y = p.y - 0.01 * s })
           }
           { empty
             with
               p={ empty.p with x=0.; y= -16. }
-              f=Some (fun sp s d -> { sp with p = { sp.p with y = sp.p.y - 0.02 * s }})
+              f=Some (fun p s d -> { p with y = p.y - 0.02 * s })
           }
           { empty
             with
               p={ empty.p with x=0.; y=12. }
-              f=Some (fun sp s d -> { sp with p = { sp.p with y = sp.p.y + 0.02 * s }})
+              f=Some (fun p s d -> { p with y = p.y + 0.02 * s })
           }
           { empty
             with
@@ -126,61 +128,61 @@ module Robot =
           { empty
             with
               p={ empty.p with x= -3.; y=34. }
-              f = Some ( fun sp s d ->
+              f = Some ( fun p s d ->
                 if d > 0. then
-                  { sp with p= { sp.p with x = sp.p.x + 0.01 * s; y = sp.p.y - 0.015 * s }}
+                  { p with x = p.x + 0.01 * s; y = p.y - 0.015 * s }
                 else
-                  { sp with p= { sp.p with y = sp.p.y + 0.02 * s * d }}
+                  { p with y = p.y + 0.02 * s * d }
               )
           }
           { empty
             with
               p={ empty.p with x= 3.; y=34. }
-              f = Some ( fun sp s d ->
+              f = Some ( fun p s d ->
                 if d > 0. then
-                  { sp with p= { sp.p with y = sp.p.y + 0.002 * s } }
+                  { p with y = p.y + 0.002 * s }
                 else
-                  { sp with p= { sp.p with x = sp.p.x - 0.01 * s;  y = sp.p.y - 0.015 * s } }
+                  { p with x = p.x - 0.01 * s;  y = p.y - 0.015 * s }
             )
           }
           { empty
             with
               p={ empty.p with x= -28.; y=0. }
-              f = Some ( fun sp s d ->
-                { sp with p= { sp.p with x = sp.p.x + sp.p.vx * 0.035;  y = sp.p.y - 0.001 * s } }
+              f = Some ( fun p s d ->
+                { p with x = p.x + p.vx * 0.035;  y = p.y - 0.001 * s }
             )
           }
           { empty
             with
               p={ empty.p with x= 28.; y=0. }
-              f = Some ( fun sp s d ->
-                { sp with p= { sp.p with x = sp.p.x + sp.p.vx * 0.035;  y = sp.p.y - 0.001 * s } }
+              f = Some ( fun p s d ->
+                { p with x = p.x + p.vx * 0.035;  y = p.y - 0.001 * s }
             )
           }
           { empty
             with
               p={ empty.p with x= -3.; y=64. }
-              f = Some ( fun sp s d ->
-                let y = sp.p.y + 0.015 * s
+              f = Some ( fun p s d ->
+                let y = p.y + 0.015 * s
                 let y =
                   if d > 0. then
                     y - 0.01 * s
                   else
                     y + 0.05 * s
-                { sp with p= { sp.p with y = y } }
+                { p with y = y }
             )
           }
           { empty
             with
               p={ empty.p with x= 3.; y=64. }
-              f = Some ( fun sp s d ->
-                let y = sp.p.y + 0.015 * s
+              f = Some ( fun p s d ->
+                let y = p.y + 0.015 * s
                 let y =
                   if d > 0. then
                     y + 0.05 * s
                   else
                     y - 0.01 * s
-                { sp with p= { sp.p with y = y } }
+                { p with y = y }
             )
           }
         ]
@@ -225,7 +227,7 @@ module Robot =
           let dx = p0.p.x - p1.p.x
           let dy = p0.p.y - p1.p.y
           let dist = Math.sqrt(dx * dx + dy * dy)
-          if dist > 0. then
+          if dist >= 0. then
             let tw = p0.p.w + p1.p.w
             let r1 = p1.p.w / tw
             let r0 = p0.p.w / tw
@@ -238,49 +240,73 @@ module Robot =
           else
             link
         )
-      (*
+    printfn "*----------------------------"
     let points =
       dancer.points
-        |> List.map( fun point ->
+        |> List.map( fun newPoint ->
+          // ---- dance ----
+          (*
+          let newPoint =
+            if p.f.IsSome then
+              let fn = p.f.Value
+              { p with p = fn p.p (16. * JS.Math.sqrt(dancer.size)) (float dir)}
+            else p
+          *)
+          let point = newPoint.p
 
+          // ---- verlet integration ----
+          let vx = (point.x - point.px) * 0.995
+          let vy = (point.y - point.py) * 0.995
+          let updated =
+            {
+              point with
+                vx = vx
+                vy = vy
+                px = point.x
+                py = point.y
+                x = point.x + vx
+                y = point.y + vy + 0.01
+            }
+          // updated point
+          { newPoint with p = updated }
         )
-    // ---- update points ----
-    for (let point of this.points) {
-      // ---- dragging ----
-      if (this === dancerDrag && point === pointDrag) {
-        point.x += (pointer.x - point.x) * 0.1;
-        point.y += (pointer.y - point.y) * 0.1;
-      }
-      // ---- dance ----
-      if (this !== dancerDrag) {
-        point.fn && point.fn(16 * Math.sqrt(this.size), this.dir);
-      }
-      // ---- verlet integration ----
-      point.vx = point.x - point.px;
-      point.vy = point.y - point.py;
-      point.px = point.x;
-      point.py = point.y;
-      point.vx *= 0.995;
-      point.vy *= 0.995;
-      point.x += point.vx;
-      point.y += point.vy + 0.01;
-    }
+    (*
     // ---- ground ----
-    for (let link of this.links) {
-      const p1 = link.p1;
-      if (p1.y > canvas.height * ground - link.size * 0.5) {
-        p1.y = canvas.height * ground - link.size * 0.5;
-        p1.x -= p1.vx;
-        p1.vx = 0;
-        p1.vy = 0;
-      }
-    }
+    let links =
+      links
+        |> List.map( fun link ->
+          let p1 = link.p1
+          if p1.p.y > canvas.height * ground - link.size * 0.5 then
+            {
+              link with
+                p1 =
+                {
+                  p1 with
+                    p =
+                      {
+                        p1.p with
+                          y= canvas.height * ground - link.size * 0.5
+                          x= p1.p.x - p1.p.vx
+                          vx=0.
+                          vy=0.
+                      }
+                }
+            }
+          else
+            link
+        )
     // ---- center position ----
-    const delta = (this.x - this.points[0].x) * 0.0002;
-    this.points[9].x += delta;
-    this.points[10].x += delta;
-  *)
-    dancer
+    let delta = (dancer.x - points.Head.p.x ) * 0.0002
+    let points =
+      points
+        |> List.mapi( fun i point ->
+          if i = 9 || i = 10 then
+            {point with p = { point.p with x= point.p.x + delta } }
+          else
+            point
+        )
+        *)
+    { dancer with links=links;points=points;frame=frame;dir=dir}
 
   let draw dancer =
     dancer.links
@@ -371,10 +397,8 @@ module Dancers =
               let p0 = points.[link.p0]
               let p1 = points.[link.p1]
               let dx = p0.p.x - p1.p.x
-              printfn "dx=%f" dx
               let dy = p0.p.y - p1.p.y
               let distance = JS.Math.sqrt(dx * dx + dy * dy)
-              printfn "distance %f" distance
               let size = float( link.size) * dancer.size / 3.
               let imageColor = sprintf "hsl(%i,30%%,%i%%)" (int dancer.color) ((dancer.light * link.lum) |> int)
               {
@@ -393,7 +417,6 @@ module Dancers =
 
 let run =
   let mutable tick = 0.
-  let ground = if canvas.height > 500. then 0.85 else 1.0
   let y = canvas.height * ground - 340.
 
   let initialDancers =
@@ -410,7 +433,6 @@ let run =
     ctx.fillStyle <- !^"#222"
     ctx.fillRect(0., 0., canvas.width, canvas.height * 0.15)
     ctx.fillRect(0., canvas.height * 0.85, canvas.width, canvas.height * 0.15)
-    // increment the ticker
     dancers <- dancers |> List.map (Robot.update >> Robot.draw)
     tick <- tick + 0.1
   run
